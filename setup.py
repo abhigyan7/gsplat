@@ -95,6 +95,14 @@ def get_extensions():
     if sys.platform == "win32":
         extra_compile_args["nvcc"] += ["-DWIN32_LEAN_AND_MEAN"]
 
+    # Fix https://github.com/pytorch/pytorch/issues/122169
+    nvcc_std = os.popen("nvcc -h | grep -- '--std'")
+    nvcc_std = nvcc_std.read()
+
+    if nvcc_std.__contains__('c++20'):
+        nvcc_flags.append('-std=c++20')
+
+
     current_dir = pathlib.Path(__file__).parent.resolve()
     glm_path = os.path.join(current_dir, "gsplat", "cuda", "csrc", "third_party", "glm")
     extension_v1 = CUDAExtension(
