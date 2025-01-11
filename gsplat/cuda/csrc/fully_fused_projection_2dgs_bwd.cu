@@ -118,7 +118,8 @@ __global__ void fully_fused_projection_bwd_2dgs_kernel(
         v_mean
     );
 
-    // #if __CUDA_ARCH__ >= 700
+#if __CUDA_ARCH__ >= 700
+
     // write out results with warp-level reduction
     auto warp = cg::tiled_partition<32>(cg::this_thread_block());
     auto warp_group_g = cg::labeled_partition(warp, gid);
@@ -146,6 +147,29 @@ __global__ void fully_fused_projection_bwd_2dgs_kernel(
         gpuAtomicAdd(v_scales, v_scale[0]);
         gpuAtomicAdd(v_scales + 1, v_scale[1]);
     }
+
+#else
+
+    // Alternative implementation using just atomic operations
+    if (v_means != nullptr) {
+        v_means += gid * 3;
+        GSPLAT_PRAGMA_UNROLL
+        for (uint32_t i = 0; i < 3; i++) {
+            gpuAtomicAdd(v_means + i, v_mean[i]);
+        }
+    }
+
+    // Directly output gradients w.r.t. the quaternion and scale
+    v_quats += gid * 4;
+    v_scales += gid * 3;
+    gpuAtomicAdd(v_quats, v_quat[0]);
+    gpuAtomicAdd(v_quats + 1, v_quat[1]);
+    gpuAtomicAdd(v_quats + 2, v_quat[2]);
+    gpuAtomicAdd(v_quats + 3, v_quat[3]);
+    gpuAtomicAdd(v_scales, v_scale[0]);
+    gpuAtomicAdd(v_scales + 1, v_scale[1]);
+
+#endif
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>

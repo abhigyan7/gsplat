@@ -77,7 +77,7 @@ __global__ void world_to_cam_bwd_kernel(
         covar_world_to_cam_vjp<OpT>(R, covar, v_covar_c, v_R, v_covar);
     }
 
-    // #if __CUDA_ARCH__ >= 700
+#if __CUDA_ARCH__ >= 700
     // write out results with warp-level reduction
     auto warp = cg::tiled_partition<32>(cg::this_thread_block());
     auto warp_group_g = cg::labeled_partition(warp, gid);
@@ -120,6 +120,37 @@ __global__ void world_to_cam_bwd_kernel(
             }
         }
     }
+#else
+    // write out results with warp-level reduction
+    if (v_means != nullptr) {
+        v_means += gid * 3;
+        GSPLAT_PRAGMA_UNROLL
+        for (uint32_t i = 0; i < 3; i++) {
+            gpuAtomicAdd(v_means + i, v_mean[i]);
+        }
+    }
+    if (v_covars != nullptr) {
+        v_covars += gid * 9;
+        GSPLAT_PRAGMA_UNROLL
+        for (uint32_t i = 0; i < 3; i++) { // rows
+            GSPLAT_PRAGMA_UNROLL
+            for (uint32_t j = 0; j < 3; j++) { // cols
+                gpuAtomicAdd(v_covars + i * 3 + j, T(v_covar[j][i]));
+            }
+        }
+    }
+    if (v_viewmats != nullptr) {
+        v_viewmats += cid * 16;
+        GSPLAT_PRAGMA_UNROLL
+        for (uint32_t i = 0; i < 3; i++) { // rows
+            GSPLAT_PRAGMA_UNROLL
+            for (uint32_t j = 0; j < 3; j++) { // cols
+                gpuAtomicAdd(v_viewmats + i * 4 + j, T(v_R[j][i]));
+            }
+            gpuAtomicAdd(v_viewmats + i * 4 + 3, T(v_t[i]));
+        }
+    }
+#endif
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> world_to_cam_bwd_tensor(

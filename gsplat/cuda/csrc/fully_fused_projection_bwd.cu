@@ -196,7 +196,7 @@ __global__ void fully_fused_projection_bwd_kernel(
     );
     covar_world_to_cam_vjp(R, covar, v_covar_c, v_R, v_covar);
 
-    // #if __CUDA_ARCH__ >= 700
+#if __CUDA_ARCH__ >= 700
     // write out results with warp-level reduction
     auto warp = cg::tiled_partition<32>(cg::this_thread_block());
     auto warp_group_g = cg::labeled_partition(warp, gid);
@@ -260,6 +260,54 @@ __global__ void fully_fused_projection_bwd_kernel(
             }
         }
     }
+
+#else
+    // Alternative implementation using just atomic operations
+    if (v_means != nullptr) {
+        v_means += gid * 3;
+        GSPLAT_PRAGMA_UNROLL
+        for (uint32_t i = 0; i < 3; i++) {
+            gpuAtomicAdd(v_means + i, v_mean[i]);
+        }
+    }
+    if (v_covars != nullptr) {
+        v_covars += gid * 6;
+        gpuAtomicAdd(v_covars, v_covar[0][0]);
+        gpuAtomicAdd(v_covars + 1, v_covar[0][1] + v_covar[1][0]);
+        gpuAtomicAdd(v_covars + 2, v_covar[0][2] + v_covar[2][0]);
+        gpuAtomicAdd(v_covars + 3, v_covar[1][1]);
+        gpuAtomicAdd(v_covars + 4, v_covar[1][2] + v_covar[2][1]);
+        gpuAtomicAdd(v_covars + 5, v_covar[2][2]);
+    } else {
+        // Directly output gradients w.r.t. the quaternion and scale
+        mat3<T> rotmat = quat_to_rotmat<T>(quat);
+        vec4<T> v_quat(0.f);
+        vec3<T> v_scale(0.f);
+        quat_scale_to_covar_vjp<T>(
+            quat, scale, rotmat, v_covar, v_quat, v_scale
+        );
+        v_quats += gid * 4;
+        v_scales += gid * 3;
+        gpuAtomicAdd(v_quats, v_quat[0]);
+        gpuAtomicAdd(v_quats + 1, v_quat[1]);
+        gpuAtomicAdd(v_quats + 2, v_quat[2]);
+        gpuAtomicAdd(v_quats + 3, v_quat[3]);
+        gpuAtomicAdd(v_scales, v_scale[0]);
+        gpuAtomicAdd(v_scales + 1, v_scale[1]);
+        gpuAtomicAdd(v_scales + 2, v_scale[2]);
+    }
+    if (v_viewmats != nullptr) {
+        v_viewmats += cid * 16;
+        GSPLAT_PRAGMA_UNROLL
+        for (uint32_t i = 0; i < 3; i++) { // rows
+            GSPLAT_PRAGMA_UNROLL
+            for (uint32_t j = 0; j < 3; j++) { // cols
+                gpuAtomicAdd(v_viewmats + i * 4 + j, v_R[j][i]);
+            }
+            gpuAtomicAdd(v_viewmats + i * 4 + 3, v_t[i]);
+        }
+    }
+#endif
 }
 
 std::tuple<
