@@ -528,7 +528,7 @@ def rasterization(
     if colors.shape[-1] > channel_chunk:
         # slice into chunks
         n_chunks = (colors.shape[-1] + channel_chunk - 1) // channel_chunk
-        render_colors, render_alphas = [], []
+        render_colors, render_alphas, n_toucheds = [], [], []
         for i in range(n_chunks):
             colors_chunk = colors[..., i * channel_chunk : (i + 1) * channel_chunk]
             backgrounds_chunk = (
@@ -536,7 +536,7 @@ def rasterization(
                 if backgrounds is not None
                 else None
             )
-            render_colors_, render_alphas_ = rasterize_to_pixels(
+            render_colors_, render_alphas_, n_touched = rasterize_to_pixels(
                 means2d,
                 conics,
                 colors_chunk,
@@ -552,10 +552,12 @@ def rasterization(
             )
             render_colors.append(render_colors_)
             render_alphas.append(render_alphas_)
+            n_toucheds.append(n_touched)
         render_colors = torch.cat(render_colors, dim=-1)
         render_alphas = render_alphas[0]  # discard the rest
+        n_touched = torch.cat(n_touched, dim=-1)
     else:
-        render_colors, render_alphas = rasterize_to_pixels(
+        render_colors, render_alphas, n_touched = rasterize_to_pixels(
             means2d,
             conics,
             colors,
@@ -578,6 +580,8 @@ def rasterization(
             ],
             dim=-1,
         )
+
+    meta['n_touched'] = n_touched
 
     return render_colors, render_alphas, meta
 

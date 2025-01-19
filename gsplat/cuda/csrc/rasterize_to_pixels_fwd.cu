@@ -33,7 +33,9 @@ __global__ void rasterize_to_pixels_fwd_kernel(
     const int32_t *__restrict__ flatten_ids,  // [n_isects]
     S *__restrict__ render_colors, // [C, image_height, image_width, COLOR_DIM]
     S *__restrict__ render_alphas, // [C, image_height, image_width, 1]
-    int32_t *__restrict__ last_ids // [C, image_height, image_width]
+    int32_t *__restrict__ last_ids, // [C, image_height, image_width]
+    const float visibility_min_T, // gaussians after T is below this value aren't counted as visible
+    int32_t *__restrict__ n_touched // number of pixels in which this gaussian is visible
 ) {
     // each thread draws one pixel, but also timeshares caching gaussians in a
     // shared tile
@@ -147,6 +149,10 @@ __global__ void rasterize_to_pixels_fwd_kernel(
                 continue;
             }
 
+            if (T > visibility_min_T) {
+                atomicAdd(&n_touched[camera_id*N+id_batch[t]], 1);
+            }
+
             const S next_T = T * (1.0f - alpha);
             if (next_T <= 1e-4) { // this pixel is done: exclusive
                 done = true;
@@ -161,6 +167,7 @@ __global__ void rasterize_to_pixels_fwd_kernel(
                 pix_out[k] += c_ptr[k] * vis;
             }
             cur_idx = batch_start + t;
+
 
             T = next_T;
         }
@@ -185,7 +192,7 @@ __global__ void rasterize_to_pixels_fwd_kernel(
 }
 
 template <uint32_t CDIM>
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> call_kernel_with_dim(
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> call_kernel_with_dim(
     // Gaussian parameters
     const torch::Tensor &means2d,   // [C, N, 2] or [nnz, 2]
     const torch::Tensor &conics,    // [C, N, 3] or [nnz, 3]
@@ -199,7 +206,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> call_kernel_with_dim(
     const uint32_t tile_size,
     // intersections
     const torch::Tensor &tile_offsets, // [C, tile_height, tile_width]
-    const torch::Tensor &flatten_ids   // [n_isects]
+    const torch::Tensor &flatten_ids,   // [n_isects]
+    const float visibility_min_T
 ) {
     GSPLAT_DEVICE_GUARD(means2d);
     GSPLAT_CHECK_INPUT(means2d);
@@ -238,6 +246,10 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> call_kernel_with_dim(
     );
     torch::Tensor last_ids = torch::empty(
         {C, image_height, image_width}, means2d.options().dtype(torch::kInt32)
+    );
+
+    torch::Tensor n_touched = torch::empty(
+        {C, N}, means2d.options().dtype(torch::kInt32)
     );
 
     at::cuda::CUDAStream stream = at::cuda::getCurrentCUDAStream();
@@ -281,13 +293,15 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> call_kernel_with_dim(
             flatten_ids.data_ptr<int32_t>(),
             renders.data_ptr<float>(),
             alphas.data_ptr<float>(),
-            last_ids.data_ptr<int32_t>()
+            last_ids.data_ptr<int32_t>(),
+            visibility_min_T,
+            n_touched.data_ptr<int32_t>()
         );
 
-    return std::make_tuple(renders, alphas, last_ids);
+    return std::make_tuple(renders, alphas, last_ids, n_touched);
 }
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 rasterize_to_pixels_fwd_tensor(
     // Gaussian parameters
     const torch::Tensor &means2d,   // [C, N, 2] or [nnz, 2]
@@ -302,7 +316,8 @@ rasterize_to_pixels_fwd_tensor(
     const uint32_t tile_size,
     // intersections
     const torch::Tensor &tile_offsets, // [C, tile_height, tile_width]
-    const torch::Tensor &flatten_ids   // [n_isects]
+    const torch::Tensor &flatten_ids,   // [n_isects]
+    const float visibility_min_T
 ) {
     GSPLAT_CHECK_INPUT(colors);
     uint32_t channels = colors.size(-1);
@@ -320,7 +335,8 @@ rasterize_to_pixels_fwd_tensor(
             image_height,                                                      \
             tile_size,                                                         \
             tile_offsets,                                                      \
-            flatten_ids                                                        \
+            flatten_ids,                                                       \
+            visibility_min_T                                                   \
         );
 
     // TODO: an optimization can be done by passing the actual number of
