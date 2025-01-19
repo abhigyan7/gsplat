@@ -439,7 +439,8 @@ def accumulate(
     camera_ids: Tensor,  # [M]
     image_width: int,
     image_height: int,
-) -> Tuple[Tensor, Tensor]:
+    visibility_min_T: float = 0.5,
+) -> Tuple[Tensor, Tensor, Tensor]:
     """Alpah compositing of 2D Gaussians in Pure Pytorch.
 
     This function performs alpha compositing for Gaussians based on the pair of indices
@@ -480,7 +481,7 @@ def accumulate(
     """
 
     try:
-        from nerfacc import accumulate_along_rays, render_weight_from_alpha
+        from nerfacc import accumulate_along_rays, render_weight_from_alpha, render_visibility_from_alpha
     except ImportError:
         raise ImportError("Please install nerfacc package: pip install nerfacc")
 
@@ -506,6 +507,9 @@ def accumulate(
     weights, trans = render_weight_from_alpha(
         alphas, ray_indices=indices, n_rays=total_pixels
     )
+    visibility = render_visibility_from_alpha(
+        alphas, ray_indices=indices, n_rays=total_pixels, early_stop_eps=1.0-visibility_min_T
+    )
     renders = accumulate_along_rays(
         weights,
         colors[camera_ids, gaussian_ids],
@@ -515,8 +519,14 @@ def accumulate(
     alphas = accumulate_along_rays(
         weights, None, ray_indices=indices, n_rays=total_pixels
     ).reshape(C, image_height, image_width, 1)
+    n_touched = torch.zeros([C, N], device=opacities.device).long()
+    # assert False, (n_touched.shape, visibility.shape, camera_ids.shape, gaussian_ids.shape)
+    # (n_touched[camera_ids, gaussian_ids])[visibility] += 1
+    index = torch.stack((camera_ids, gaussian_ids), axis=0)
+    # assert False, index.shape
+    n_touched.scatter_add_(0, index, visibility.long())
 
-    return renders, alphas
+    return renders, alphas, n_touched
 
 
 def _rasterize_to_pixels(
@@ -531,6 +541,7 @@ def _rasterize_to_pixels(
     flatten_ids: Tensor,  # [n_isects]
     backgrounds: Optional[Tensor] = None,  # [C, channels]
     batch_per_iter: int = 100,
+    visibility_min_T: float = 0.5,
 ):
     """Pytorch implementation of `gsplat.cuda._wrapper.rasterize_to_pixels()`.
 
@@ -564,6 +575,7 @@ def _rasterize_to_pixels(
         (C, image_height, image_width, colors.shape[-1]), device=device
     )
     render_alphas = torch.zeros((C, image_height, image_width, 1), device=device)
+    n_touched = torch.zeros((C, N), device=device).long()
 
     # Split Gaussians into batches and iteratively accumulate the renderings
     block_size = tile_size * tile_size
@@ -594,7 +606,7 @@ def _rasterize_to_pixels(
             break
 
         # Accumulate the renderings within this batch of Gaussians.
-        renders_step, accs_step = accumulate(
+        renders_step, accs_step, n_touched_step = accumulate(
             means2d,
             conics,
             opacities,
@@ -607,6 +619,7 @@ def _rasterize_to_pixels(
         )
         render_colors = render_colors + renders_step * transmittances[..., None]
         render_alphas = render_alphas + accs_step * transmittances[..., None]
+        n_touched = n_touched + n_touched_step
 
     render_alphas = render_alphas
     if backgrounds is not None:
@@ -614,7 +627,7 @@ def _rasterize_to_pixels(
             1.0 - render_alphas
         )
 
-    return render_colors, render_alphas
+    return render_colors, render_alphas, n_touched
 
 
 def _eval_sh_bases_fast(basis_dim: int, dirs: Tensor):

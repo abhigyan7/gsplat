@@ -35,7 +35,7 @@ __global__ void rasterize_to_pixels_fwd_kernel(
     S *__restrict__ render_alphas, // [C, image_height, image_width, 1]
     int32_t *__restrict__ last_ids, // [C, image_height, image_width]
     const float visibility_min_T, // gaussians after T is below this value aren't counted as visible
-    int32_t *__restrict__ n_touched // number of pixels in which this gaussian is visible
+    int32_t *__restrict__ n_touched // [C, N] number of pixels in which this gaussian is visible
 ) {
     // each thread draws one pixel, but also timeshares caching gaussians in a
     // shared tile
@@ -149,10 +149,6 @@ __global__ void rasterize_to_pixels_fwd_kernel(
                 continue;
             }
 
-            if (T > visibility_min_T) {
-                atomicAdd(&n_touched[camera_id*N+id_batch[t]], 1);
-            }
-
             const S next_T = T * (1.0f - alpha);
             if (next_T <= 1e-4) { // this pixel is done: exclusive
                 done = true;
@@ -167,6 +163,10 @@ __global__ void rasterize_to_pixels_fwd_kernel(
                 pix_out[k] += c_ptr[k] * vis;
             }
             cur_idx = batch_start + t;
+
+            if (next_T > visibility_min_T) {
+                atomicAdd(&(n_touched[g]), 1);
+            }
 
 
             T = next_T;
@@ -248,8 +248,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> call_kern
         {C, image_height, image_width}, means2d.options().dtype(torch::kInt32)
     );
 
-    torch::Tensor n_touched = torch::empty(
-        {C, N}, means2d.options().dtype(torch::kInt32)
+    torch::Tensor n_touched = torch::full(
+        {C, N}, 0, means2d.options().dtype(torch::kInt32)
     );
 
     at::cuda::CUDAStream stream = at::cuda::getCurrentCUDAStream();
