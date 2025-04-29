@@ -1,5 +1,11 @@
 # gsplat
 
+This repo supports rasterization on older GPUs with compute capability less than 7.1. To make backprop work, I removed all uses of `labeled_partition` -- there is surely a better/faster way to do this but for now this will have to do. Tested on a GTX 1050 Ti.
+
+Make sure to use the `alternative_bwd_reduce_impls_for_cudacc_ge_6` branch.
+
+<hr>
+
 [![Core Tests.](https://github.com/nerfstudio-project/gsplat/actions/workflows/core_tests.yml/badge.svg?branch=main)](https://github.com/nerfstudio-project/gsplat/actions/workflows/core_tests.yml)
 [![Docs](https://github.com/nerfstudio-project/gsplat/actions/workflows/doc.yml/badge.svg?branch=main)](https://github.com/nerfstudio-project/gsplat/actions/workflows/doc.yml)
 
@@ -40,11 +46,12 @@ To build gsplat from source on Windows, please check [this instruction](docs/INS
 This repo comes with a standalone script that reproduces the official Gaussian Splatting with exactly the same performance on PSNR, SSIM, LPIPS, and converged number of Gaussians. Powered by gsplat’s efficient CUDA implementation, the training takes up to **4x less GPU memory** with up to **15% less time** to finish than the official implementation. Full report can be found [here](https://docs.gsplat.studio/main/tests/eval.html).
 
 ```bash
-pip install -r examples/requirements.txt
+cd examples
+pip install -r requirements.txt
 # download mipnerf_360 benchmark data
-python examples/datasets/download_dataset.py
+python datasets/download_dataset.py
 # run batch evaluation
-bash examples/benchmarks/basic.sh
+bash benchmarks/basic.sh
 ```
 
 ## Examples
