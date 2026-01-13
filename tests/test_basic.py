@@ -525,6 +525,8 @@ def test_rasterize_to_pixels(test_data, channels: int, batch_dims: Tuple[int, ..
     colors = test_data["colors"]
     backgrounds = test_data["backgrounds"]
 
+    sensitivity_scores = torch.zeros_like(opacities)
+
     covars, _ = quat_scale_to_covar_preci(quats, scales, compute_preci=False, triu=True)
 
     # Project Gaussians to 2D
@@ -561,6 +563,7 @@ def test_rasterize_to_pixels(test_data, channels: int, batch_dims: Tuple[int, ..
         isect_offsets,
         flatten_ids,
         backgrounds=backgrounds,
+        sensitivity_scores=sensitivity_scores,
     )
     _render_colors, _render_alphas = _rasterize_to_pixels(
         means2d,

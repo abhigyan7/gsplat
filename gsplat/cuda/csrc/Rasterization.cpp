@@ -114,7 +114,7 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> rasterize_to_pixels_3dgs_fwd(
     return std::make_tuple(renders, alphas, last_ids);
 }
 
-std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor, at::Tensor>
+std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor, at::Tensor, at::Tensor>
 rasterize_to_pixels_3dgs_bwd(
     // Gaussian parameters
     const at::Tensor means2d,                   // [..., N, 2] or [nnz, 2]
@@ -163,10 +163,14 @@ rasterize_to_pixels_3dgs_bwd(
     at::Tensor v_conics = at::zeros_like(conics);
     at::Tensor v_colors = at::zeros_like(colors);
     at::Tensor v_opacities = at::zeros_like(opacities);
+    at::Tensor sensitivity_scores = at::zeros_like(opacities);
     at::Tensor v_means2d_abs;
     if (absgrad) {
         v_means2d_abs = at::zeros_like(means2d);
     }
+
+    // TODO(abhigyan) if we want to make sensitivity computation optional
+    // This is how we'd do it
 
 #define __LAUNCH_KERNEL__(N)                                                   \
     case N:                                                                    \
@@ -190,7 +194,8 @@ rasterize_to_pixels_3dgs_bwd(
             v_means2d,                                                         \
             v_conics,                                                          \
             v_colors,                                                          \
-            v_opacities                                                        \
+            v_opacities,                                                       \
+            sensitivity_scores                                                 \
         );                                                                     \
         break;
 
@@ -223,7 +228,7 @@ rasterize_to_pixels_3dgs_bwd(
 #undef __LAUNCH_KERNEL__
 
     return std::make_tuple(
-        v_means2d_abs, v_means2d, v_conics, v_colors, v_opacities
+        v_means2d_abs, v_means2d, v_conics, v_colors, v_opacities, sensitivity_scores
     );
 }
 

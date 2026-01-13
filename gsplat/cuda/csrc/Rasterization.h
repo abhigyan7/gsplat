@@ -64,7 +64,8 @@ void launch_rasterize_to_pixels_3dgs_bwd_kernel(
     at::Tensor v_means2d,                   // [..., N, 2] or [nnz, 2]
     at::Tensor v_conics,                    // [..., N, 3] or [nnz, 3]
     at::Tensor v_colors,                    // [..., N, 3] or [nnz, 3]
-    at::Tensor v_opacities                  // [..., N] or [nnz]
+    at::Tensor v_opacities,                 // [..., N] or [nnz]
+    at::Tensor sensitivity_scores           // [..., N] or [nnz]
 );
 
 /////////////////////////////////////////////////

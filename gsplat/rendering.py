@@ -748,6 +748,12 @@ def rasterization(
     )
 
     # print("rank", world_rank, "Before rasterize_to_pixels")
+    sensitivity_scores = torch.zeros_like(opacities).requires_grad(True)
+    meta.update(
+        {
+            'sensitivity_scores': sensitivity_scores,
+        }
+    )
     if colors.shape[-1] > channel_chunk:
         # slice into chunks
         n_chunks = (colors.shape[-1] + channel_chunk - 1) // channel_chunk
@@ -796,6 +802,7 @@ def rasterization(
                     backgrounds=backgrounds_chunk,
                     packed=packed,
                     absgrad=absgrad,
+                    sensitivity_scores=sensitivity_scores,
                 )
             render_colors.append(render_colors_)
             render_alphas.append(render_alphas_)
@@ -839,6 +846,7 @@ def rasterization(
                 backgrounds=backgrounds,
                 packed=packed,
                 absgrad=absgrad,
+                sensitivity_scores=sensitivity_scores,
             )
     if render_mode in ["ED", "RGB+ED"]:
         # normalize the accumulated depth to get the expected depth
