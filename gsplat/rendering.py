@@ -748,7 +748,7 @@ def rasterization(
     )
 
     # print("rank", world_rank, "Before rasterize_to_pixels")
-    sensitivity_scores = torch.zeros_like(opacities).requires_grad(True)
+    sensitivity_scores = torch.zeros_like(opacities, requires_grad=True)
     meta.update(
         {
             'sensitivity_scores': sensitivity_scores,

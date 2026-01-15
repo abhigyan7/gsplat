@@ -190,6 +190,7 @@ __global__ void rasterize_to_pixels_3dgs_bwd_kernel(
             vec2 v_xy_local = {0.f, 0.f};
             vec2 v_xy_abs_local = {0.f, 0.f};
             float v_opacity_local = 0.f;
+            float v_gaussian_local = 0.f;
             // initialize everything to 0, only set if the lane is valid
             if (valid) {
                 // compute the current T for this gaussian
@@ -222,6 +223,8 @@ __global__ void rasterize_to_pixels_3dgs_bwd_kernel(
 
                 if (opac * vis <= 0.999f) {
                     const float v_sigma = -opac * vis * v_alpha;
+                    v_gaussian_local = opac * v_alpha;
+                    v_gaussian_local = v_gaussian_local * v_gaussian_local;
                     v_conic_local = {
                         0.5f * v_sigma * delta.x * delta.x,
                         v_sigma * delta.x * delta.y,
@@ -249,6 +252,7 @@ __global__ void rasterize_to_pixels_3dgs_bwd_kernel(
                 warpSum(v_xy_abs_local, warp);
             }
             warpSum(v_opacity_local, warp);
+            warpSum(v_gaussian_local, warp);
             if (warp.thread_rank() == 0) {
                 int32_t g = id_batch[t]; // flatten index in [I * N] or [nnz]
                 float *v_rgb_ptr = (float *)(v_colors) + CDIM * g;
@@ -273,6 +277,7 @@ __global__ void rasterize_to_pixels_3dgs_bwd_kernel(
                 }
 
                 gpuAtomicAdd(v_opacities + g, v_opacity_local);
+                gpuAtomicAdd(sensitivity_scores + g, v_gaussian_local);
             }
         }
     }
