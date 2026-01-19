@@ -311,6 +311,8 @@ def test_rasterize_to_pixels_2dgs(
     normals.requires_grad = True
     densify.requires_grad = True
 
+    sensitivity_scores = torch.zeros_like(opacities)
+
     (render_colors, render_alphas, render_normals, _, _,) = rasterize_to_pixels_2dgs(
         means2d,
         ray_transforms,
@@ -325,6 +327,7 @@ def test_rasterize_to_pixels_2dgs(
         flatten_ids,
         backgrounds=backgrounds,
         distloss=True,
+        sensitivity_scores=sensitivity_scores,
     )
 
     _render_colors, _render_alphas, _render_normals = _rasterize_to_pixels_2dgs(

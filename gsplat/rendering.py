@@ -1636,6 +1636,8 @@ def rasterization_2dgs(
     else:  # RGB
         pass
 
+    sensitivity_scores = torch.zeros_like(opacities, requires_grad=True)
+
     (
         render_colors,
         render_alphas,
@@ -1658,6 +1660,7 @@ def rasterization_2dgs(
         packed=packed,
         absgrad=absgrad,
         distloss=distloss,
+        sensitivity_scores=sensitivity_scores,
     )
     render_normals_from_depth = None
     if render_mode in ["ED", "RGB+ED"]:
@@ -1701,6 +1704,7 @@ def rasterization_2dgs(
         "n_cameras": C,
         "render_distort": render_distort,
         "gradient_2dgs": densify,  # This holds the gradient used for densification for 2dgs
+        "sensitivity_scores": sensitivity_scores,
     }
 
     render_normals = torch.einsum(

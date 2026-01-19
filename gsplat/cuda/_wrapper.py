@@ -2244,6 +2244,7 @@ def rasterize_to_pixels_2dgs(
     packed: bool = False,
     absgrad: bool = False,
     distloss: bool = False,
+    sensitivity_scores: Optional[Tensor] = None, # [..., N]
 ) -> Tuple[Tensor, Tensor]:
     """Rasterize Gaussians to pixels.
 
@@ -2349,6 +2350,7 @@ def rasterize_to_pixels_2dgs(
         flatten_ids.contiguous(),
         absgrad,
         distloss,
+        sensitivity_scores,
     )
 
     if padded_channels > 0:
@@ -2465,6 +2467,7 @@ class _RasterizeToPixels2DGS(torch.autograd.Function):
         flatten_ids: Tensor,
         absgrad: bool,
         distloss: bool,
+        sensitivity_scores: Tensor,
     ) -> Tuple[Tensor, Tensor]:
         (
             render_colors,
@@ -2560,6 +2563,7 @@ class _RasterizeToPixels2DGS(torch.autograd.Function):
             v_opacities,
             v_normals,
             v_densify,
+            sensitivity_scores,
         ) = _make_lazy_cuda_func("rasterize_to_pixels_2dgs_bwd")(
             means2d,
             ray_transforms,
@@ -2612,4 +2616,5 @@ class _RasterizeToPixels2DGS(torch.autograd.Function):
             None,
             None,
             None,
+            sensitivity_scores,
         )

@@ -409,6 +409,7 @@ std::tuple<
     at::Tensor,
     at::Tensor,
     at::Tensor,
+    at::Tensor,
     at::Tensor>
 rasterize_to_pixels_2dgs_bwd(
     // Gaussian parameters

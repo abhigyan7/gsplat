@@ -162,7 +162,8 @@ void launch_rasterize_to_pixels_2dgs_bwd_kernel(
     at::Tensor v_colors,                    // [..., N, 3] or [nnz, 3]
     at::Tensor v_opacities,                 // [..., N] or [nnz]
     at::Tensor v_normals,                   // [..., N, 3] or [nnz, 3]
-    at::Tensor v_densify                    // [..., N, 2] or [nnz, 2]
+    at::Tensor v_densify,                   // [..., N, 2] or [nnz, 2]
+    at::Tensor sensitivity_scores           // [..., N] or [nnz]
 );
 
 /////////////////////////////////////////////////

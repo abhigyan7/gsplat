@@ -86,7 +86,8 @@ __global__ void rasterize_to_pixels_2dgs_bwd_kernel(
     scalar_t *__restrict__ v_colors,         // [..., N, CDIM] or [nnz, CDIM]
     scalar_t *__restrict__ v_opacities,      // [..., N] or [nnz]
     scalar_t *__restrict__ v_normals,        // [..., N, 3] or [nnz, 3]
-    scalar_t *__restrict__ v_densify
+    scalar_t *__restrict__ v_densify,
+    scalar_t *__restrict__ sensitivity_scores // [..., N] or [nnz]
 ) {
     /**
      * ==============================
@@ -717,7 +718,8 @@ void launch_rasterize_to_pixels_2dgs_bwd_kernel(
     at::Tensor v_colors,                    // [..., N, 3] or [nnz, 3]
     at::Tensor v_opacities,                 // [..., N] or [nnz]
     at::Tensor v_normals,                   // [..., N, 3] or [nnz, 3]
-    at::Tensor v_densify                    // [..., N, 2] or [nnz, 2]
+    at::Tensor v_densify,                   // [..., N, 2] or [nnz, 2]
+    at::Tensor sensitivity_scores           // [..., N] or [nnz]
 ) {
     bool packed = means2d.dim() == 2;
 
@@ -797,7 +799,8 @@ void launch_rasterize_to_pixels_2dgs_bwd_kernel(
             v_colors.data_ptr<float>(),
             v_opacities.data_ptr<float>(),
             v_normals.data_ptr<float>(),
-            v_densify.data_ptr<float>()
+            v_densify.data_ptr<float>(),
+            sensitivity_scores.data_ptr<float>()
         );
 }
 
@@ -834,7 +837,8 @@ void launch_rasterize_to_pixels_2dgs_bwd_kernel(
         const at::Tensor v_colors,                                             \
         const at::Tensor v_opacities,                                          \
         const at::Tensor v_normals,                                            \
-        const at::Tensor v_densify                                             \
+        const at::Tensor v_densify,                                            \
+        const at::Tensor sensitivity_scores                                    \
     );
 
 __INS__(1)
