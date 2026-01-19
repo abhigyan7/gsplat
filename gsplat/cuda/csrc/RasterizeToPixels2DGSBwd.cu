@@ -427,6 +427,9 @@ __global__ void rasterize_to_pixels_2dgs_bwd_kernel(
             // opacity gradients
             float v_opacity_local = 0.f;
 
+            // log(sigma) gradients
+            float v_gaussian_local = 0.f;
+
             // initialize everything to 0, only set if the lane is valid
             /**
              * ==================================================
@@ -536,6 +539,7 @@ __global__ void rasterize_to_pixels_2dgs_bwd_kernel(
                     float v_depth = 0.f;
                     // d(a_i * G_i) / d(G_i) = a_i
                     const float v_G = opac * v_alpha;
+                    v_gaussian_local = v_G;
 
                     // case 1: in the forward pass, the proper ray-primitive
                     // intersection is used
@@ -625,6 +629,7 @@ __global__ void rasterize_to_pixels_2dgs_bwd_kernel(
                 warpSum(v_xy_abs_local, warp);
             }
             warpSum(v_opacity_local, warp);
+            warpSum(v_gaussian_local, warp);
             int32_t g = id_batch[t]; // flatten index in [I * N] or [nnz]
 
             /**
@@ -668,6 +673,7 @@ __global__ void rasterize_to_pixels_2dgs_bwd_kernel(
                 }
 
                 gpuAtomicAdd(v_opacities + g, v_opacity_local);
+                gpuAtomicAdd(sensitivity_scores + g, v_gaussian_local);
             }
 
             if (valid) {
